@@ -9,6 +9,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct procstat;
 
 // bio.c
 void            binit(void);
@@ -114,12 +115,13 @@ void            pinit(void);
 void            procdump(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
+int             setpriority(int, int);
 void            setproc(struct proc*);
 void            sleep(void*, struct spinlock*);
-void            updatertime(void);
+void            updatetime(void);
 void            userinit(void);
 int             wait(void);
-int             waitx(int* wtime, int * rtime);
+int             waitx(int*, int*);
 void            wakeup(void*);
 void            yield(void);
 

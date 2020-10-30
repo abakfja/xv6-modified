@@ -102,7 +102,8 @@ found:
   p->ctime = ticks;
   p->rtime = 0;
   p->etime = 0;
-  p->iotime = 0;
+  p->priority = 60;
+  p->ntimes = 0;
 
   // Leave room for trap frame.
   sp -= sizeof *p->tf;
@@ -368,15 +369,46 @@ waitx(int *wtime, int *rtime)
 
 // Update the time of each running process with every tick of CPU
 void 
-updatertime(void)
+updatetime(void)
 {
   struct proc *p;
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == RUNNING)
       p->rtime++;
   }
   release(&ptable.lock);
+}
+
+// Set the priority of a given process
+// Return -1 if no pid found
+// Else Return old priority
+int
+setpriority(int priority, int pid)
+{
+  if(priority < 0 || priority > 100) 
+    return -1;
+  struct proc *p;
+  int old = -1;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if(p->pid == pid){
+      old = p->priority;
+      p->priority = priority;
+      release(&ptable.lock);
+      break;
+    }
+
+  if(old < 0){
+    release(&ptable.lock);
+    return -1;
+  }
+  
+  if(old > priority)
+    yield();
+  
+  return old;
 }
 
 //PAGEBREAK: 42
@@ -391,6 +423,9 @@ void
 scheduler(void)
 {
   struct proc *p;
+#ifndef RR
+  struct proc *chosen;
+#endif
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -400,6 +435,7 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+#ifdef RR
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
@@ -418,8 +454,67 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
-    release(&ptable.lock);
+#endif
+#ifdef FCFS
+    chosen = (struct proc*) 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE){
+        if(chosen == (struct proc*)0)
+          chosen = p;
+        else if(p->ctime < chosen->ctime)
+          chosen = p;
+      }
+    }
 
+    if(chosen == 0){
+      release(&ptable.lock);
+      continue;
+    }
+    
+    c->proc = chosen;
+    switchuvm(chosen);
+    chosen->state = RUNNING;
+
+    swtch(&(c->scheduler), chosen->context);
+    switchkvm();
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+#endif
+// #ifdef PBS
+    chosen = (struct proc *) 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE){
+        if(chosen == (struct proc *)0)
+          chosen = p;
+        else if (p->priority < chosen->priority)
+          chosen = p;
+        else if (p->priority == chosen->priority){
+          if(p->ntimes < chosen->ntimes)
+            chosen = p;
+          else if(p->ntimes == chosen->ntimes && p->ctime < chosen->ctime)
+            chosen = p;
+        }
+      }
+    }
+    if(chosen == 0){
+      release(&ptable.lock);
+      continue;
+    }
+    cprintf("%d %d %d chosen\n", chosen->pid, chosen->priority, chosen->ctime);
+    c->proc = chosen;
+    switchuvm(chosen);
+    chosen->state = RUNNING;
+    chosen->ntimes++;
+    swtch(&(c->scheduler), chosen->context);
+    switchkvm();
+ 
+     // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+// #endif
+    release(&ptable.lock);
   }
 }
 
