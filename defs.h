@@ -116,8 +116,10 @@ void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
 void            setproc(struct proc*);
 void            sleep(void*, struct spinlock*);
+void            updatertime(void);
 void            userinit(void);
 int             wait(void);
+int             waitx(int* wtime, int * rtime);
 void            wakeup(void*);
 void            yield(void);
 
