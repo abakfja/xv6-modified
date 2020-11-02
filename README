@@ -68,14 +68,14 @@ Prints the average time for each of the x sub processes. And the total time as w
 
 Here are some comparisons:
 
-On a single CPU, 5 sub process.
+On a single CPU, 5 sub processes(all spawn at the same time).
 
 | Scheduler | rtime | wtime |
 | :-------: | :---: | :---: |
 |   `RR`    |  290  | 1144  |
 |   `PBS`   |  289  |  705  |
 |  `FCFS`   |  336  |  618  |
-|  `MLFQ`   |  283  | 1121  |
+|  `MLFQ`   |  283  | 1301  |
 
 2 CPU's for 10 sub processes.(MLFQ is using only one CPU, So not included)
 

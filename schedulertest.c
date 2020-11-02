@@ -40,7 +40,7 @@ int main() {
         totalw += wtime;
         printf(1, "%d: %d, %d\n",i, wtime, rtime);
     }
-    printf(1, "Average: %d, %d\n", totalr / NFORK, totalw / NFORK);
-    printf(1, "Total: %d, %d\n", totalr, totalw);
+    printf(1, "Average:\n rtime:%d, wtime:%d\n", totalr / NFORK, totalw / NFORK);
+    printf(1, "Total:\n rtime:%d, wtime:%d\n", totalr, totalw);
     exit();
 }
