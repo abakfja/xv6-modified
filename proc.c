@@ -12,6 +12,11 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct {
+  int tail;
+  struct proc* proc[NPROC];
+} queue[NQUEUE];
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -24,6 +29,16 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+}
+
+void
+qinit(void)
+{
+  for(int i = 0; i < NQUEUE; i++){
+    queue[i].tail = 0;
+    for(int j = 0; j < NPROC; j++)
+      queue[i].proc[j] = 0;
+  }
 }
 
 // Must be called with interrupts disabled
@@ -104,6 +119,12 @@ found:
   p->etime = 0;
   p->priority = 60;
   p->ntimes = 0;
+  p->queue = 0;
+  p->timeslice = 0;
+  for(int i = 0; i < NQUEUE; i++)
+    p->ticks[i] = 0;
+  p->lastref = ticks;
+  p->qtime = 0;
 
   // Leave room for trap frame.
   sp -= sizeof *p->tf;
@@ -156,7 +177,9 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
-
+#ifdef MLFQ
+  addproc(p, 0);
+#endif
   release(&ptable.lock);
 }
 
@@ -222,7 +245,9 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
-
+#ifdef MLFQ
+  addproc(np, 0);
+#endif
   release(&ptable.lock);
 
   return pid;
@@ -298,6 +323,9 @@ wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
+#ifdef MLFQ
+        removeproc(p,p->queue);
+#endif
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -346,6 +374,9 @@ waitx(int *wtime, int *rtime)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
+#ifdef MLFQ
+        removeproc(p,p->queue);
+#endif
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -374,8 +405,13 @@ updatetime(void)
   struct proc *p;
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == RUNNING)
+    if(p->state == RUNNING){
       p->rtime++;
+      p->ticks[p->queue]++;
+      p->timeslice++;
+      cprintf("[%d] [%d] timeslice _%d_ in _%d_\n", 
+              ticks, p->pid, p->timeslice, p->queue);
+    }
   }
   release(&ptable.lock);
 }
@@ -409,6 +445,42 @@ setpriority(int priority, int pid)
     yield();
   
   return old;
+}
+
+// Add process to a new queue
+void
+addproc(struct proc *p, int id)
+{ 
+  if(id < 0 || id > 4)
+    return;
+  if(queue[id].proc[queue[id].tail] != 0 || queue[id].tail == NPROC)
+    panic("fill queue");
+  // cprintf("added proc %d to %d\n",p->pid, id);
+  queue[id].proc[queue[id].tail++] = p;
+  p->queue = id;
+  p->qtime = 0;
+  p->lastref = ticks;
+  return;
+}     
+
+void
+removeproc(struct proc *p, int id)
+{
+  // cprintf("Removed proc %d from %d\n",p->pid, id);
+  for(int i = 0; i < queue[id].tail; i++){
+    if(queue[id].proc[i]->pid == p->pid) {
+      queue[id].proc[i] = 0;
+      for(int j = i; j < queue[id].tail; j++){
+        if(j < queue[id].tail - 1)
+          queue[id].proc[j] = queue[id].proc[j + 1];
+        else
+          queue[id].proc[j] = 0;
+      }
+      queue[id].tail--;
+      return;
+    }
+  }
+  return;
 }
 
 //PAGEBREAK: 42
@@ -470,7 +542,7 @@ scheduler(void)
       release(&ptable.lock);
       continue;
     }
-    
+
     c->proc = chosen;
     switchuvm(chosen);
     chosen->state = RUNNING;
@@ -482,15 +554,15 @@ scheduler(void)
     // It should have changed its p->state before coming back.
     c->proc = 0;
 #endif
-// #ifdef PBS
+#ifdef PBS
     chosen = (struct proc *) 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state == RUNNABLE){
+      if(p->state == RUNNABLE){        
         if(chosen == (struct proc *)0)
           chosen = p;
-        else if (p->priority < chosen->priority)
+        else if(p->priority < chosen->priority)
           chosen = p;
-        else if (p->priority == chosen->priority){
+        else if(p->priority == chosen->priority){
           if(p->ntimes < chosen->ntimes)
             chosen = p;
           else if(p->ntimes == chosen->ntimes && p->ctime < chosen->ctime)
@@ -502,7 +574,8 @@ scheduler(void)
       release(&ptable.lock);
       continue;
     }
-    cprintf("%d %d %d chosen\n", chosen->pid, chosen->priority, chosen->ctime);
+    cprintf("[%d] Running [%d]\n", 
+            ticks, chosen->pid);
     c->proc = chosen;
     switchuvm(chosen);
     chosen->state = RUNNING;
@@ -513,7 +586,81 @@ scheduler(void)
      // Process is done running for now.
     // It should have changed its p->state before coming back.
     c->proc = 0;
-// #endif
+#endif
+#ifdef MLFQ
+    // Add new processes
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE && p->queue < 0){
+        addproc(p, 0);
+      }
+    }
+    // Promote processes
+    for(int i = 0; i < NQUEUE; i++){
+      if(i > 0){
+        for(int j = 0; j < queue[i].tail; j++){
+          struct proc* p = queue[i].proc[j];
+          if(p->state == RUNNABLE && 
+              ticks - p->lastref >= 30){ // Over 30 ticks from last scheduling
+            cprintf("[%d] Promoted [%d] froom queue _%d_ to _%d_\n",
+                    ticks, p->pid, i, i - 1);
+            removeproc(p, i);
+            addproc(p, i - 1);
+            p->timeslice = 0;
+            j--;
+          }
+        }
+      }
+    }
+    chosen = (struct proc *) 0;
+    for(int i = 0; i < NQUEUE; i++){
+      if(queue[i].tail > 0){
+        chosen = queue[i].proc[0];
+
+        if(chosen == 0) 
+          continue;
+        if(chosen->state == RUNNABLE)
+          break;
+        else
+          removeproc(chosen, i);
+      }
+    }
+    
+    if(chosen == 0 || chosen->state != RUNNABLE){
+      release(&ptable.lock);
+      continue;
+    }
+    cprintf("[%d] Running [%d] in queue _%d_\n", 
+            ticks, chosen->pid, chosen->queue);
+    c->proc = chosen;
+    switchuvm(chosen);
+    chosen->state = RUNNING;
+    chosen->ntimes++;
+    chosen->lastref = ticks;
+    swtch(&(c->scheduler), chosen->context);
+    switchkvm();
+ 
+     // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+
+    // If force-fully given up control
+    if(chosen != 0 && chosen->state == RUNNABLE){
+      int q = chosen->queue;
+      if(chosen->demote){ // demote
+        chosen->demote = 0;
+        removeproc(chosen, q);
+        if(q < NQUEUE - 1){
+          cprintf("[%d] Demoted [%d] from _%d_ to _%d_\n", 
+                ticks,chosen->pid, q, q + 1);
+          addproc(chosen, q + 1);
+        } else {
+          addproc(chosen, q);
+        }
+        chosen->timeslice = 0;
+      }
+    }
+    
+#endif
     release(&ptable.lock);
   }
 }
@@ -623,8 +770,23 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
+#ifdef MLFQ
+      int q = p->queue;
+      if(p->demote){ // demote
+        p->demote = 0;
+        removeproc(p, q);
+        if(q < NQUEUE - 1){
+          q++;
+        }
+      } else {
+        removeproc(p, q);
+      }
+      p->timeslice = 0;
+      addproc(p, q);
+#endif
+    }
 }
 
 // Wake up all processes sleeping on chan.
@@ -649,8 +811,23 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
+      if(p->state == SLEEPING){
         p->state = RUNNABLE;
+#ifdef MLFQ
+        int q = p->queue;
+        if(p->demote){ // demote
+          p->demote = 0;
+          removeproc(p, q);
+          if(q < NQUEUE - 1){
+            q++;
+          }
+        } else {
+          removeproc(p, q);
+        }
+        p->timeslice = 0;
+        addproc(p, q);
+#endif
+      }
       release(&ptable.lock);
       return 0;
     }
@@ -686,12 +863,25 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %s %s %d", p->pid, state, p->name, p->timeslice);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
+#ifdef MLFQ
+    cprintf("%d %d %d", p->queue, p->demote);
+#endif
     cprintf("\n");
   }
+#ifdef MLFQ
+  cprintf("Queue status\n");
+  for(int i = 0; i < NQUEUE; i++){
+    cprintf("%d %d:\n", i, queue[i].tail);
+    for(int j = 0; j < queue[i].tail; j++){
+      cprintf("%d ",queue[i].proc[j]);
+    }
+    cprintf("\n");
+  }
+#endif
 }

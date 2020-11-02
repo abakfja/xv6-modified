@@ -99,7 +99,7 @@ extern int sys_pipe(void);
 extern int sys_read(void);
 extern int sys_sbrk(void);
 extern int sys_sleep(void);
-extern int sys_sprty(void);
+extern int sys_setpriority(void);
 extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_waitx(void);
@@ -129,7 +129,7 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_waitx]   sys_waitx,
-[SYS_sprty]   sys_sprty,
+[SYS_setpriority]   sys_setpriority,
 };
 
 void

@@ -72,7 +72,7 @@ QEMU = $(shell if which qemu > /dev/null; \
 endif
 
 ifndef SCHEDULER
-SCHEDULER = RR
+SCHEDULER := RR
 endif
 
 CC = $(TOOLPREFIX)gcc
@@ -178,7 +178,6 @@ UPROGS=\
 	_init\
 	_kill\
 	_ln\
-	_longwait\
 	_ls\
 	_mkdir\
 	_rm\
@@ -260,7 +259,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 # check in that version.
 
 EXTRA=\
-	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c longwait.c\
+	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
 	ln.c ls.c mkdir.c rm.c schedulertest.c stressfs.c time.c\
 	usertests.c wc.c zombie.c printf.c umalloc.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\

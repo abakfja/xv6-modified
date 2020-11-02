@@ -3,9 +3,9 @@
 #include "user.h"
 #include "fcntl.h"
 
-#define NFORK 5
-
-char * argv[] = { "longwait" , 0 };
+#define N 5000000
+#define loop 20
+#define NFORK 4
 
 int main() {
     for(int i = 0; i < NFORK; i++) {
@@ -15,8 +15,18 @@ int main() {
             printf(2, "fork() failed\n");
             exit();
         } else if(f == 0) {
-            exec(argv[0], argv);
-            printf(2, "exec() failed\n");
+            volatile int id = getpid();
+#ifdef PBS
+            setpriority(70 + (id % 3), id);
+#endif    
+            printf(1, "process %d started\n", id);
+            for(int i = 0; i < loop; i++) {
+                for(int j = 0; j < N; j++) {
+                    id++;
+                    id--;
+                }
+            }
+            printf(1, "process %d completed\n", id);
             exit();
         }
     }

@@ -54,7 +54,15 @@ struct proc {
   int etime;                   // End time
   int priority;                // Process Priority
   int ntimes;                  // Times process has be executed
+  int queue;                   // Current Queue
+  int ticks[NQUEUE];           // Ticks accumulated in each Queue
+  int timeslice;               // Timeslice accumulated in current Queue
+  int qtime;                   // Time entered in current queue
+  int lastref;                 // Time when it was last scheduled
+  int demote;                  // Demote flag
 };
+
+#define qpriority(x) (1<<(x))
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
