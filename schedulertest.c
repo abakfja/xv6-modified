@@ -5,7 +5,7 @@
 
 #define N 5000000
 #define loop 20
-#define NFORK 10
+#define NFORK 5
 
 int main() {
     for(int i = 0; i < NFORK; i++) {
