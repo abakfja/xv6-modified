@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "procstat.h"
 
 struct {
   struct spinlock lock;
@@ -407,10 +408,14 @@ updatetime(void)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == RUNNING){
       p->rtime++;
-      p->ticks[p->queue]++;
       p->timeslice++;
-      cprintf("[%d] [%d] timeslice _%d_ in _%d_\n", 
-              ticks, p->pid, p->timeslice, p->queue);
+#ifdef MLFQ
+      if(p->timeslice >= qpriority(p->queue)){
+        p->ticks[p->queue]++;
+      }
+      // cprintf("[%d] [%d] timeslice _%d_ in _%d_\n", 
+      //         ticks, p->pid, p->timeslice, p->queue);
+#endif 
     }
   }
   release(&ptable.lock);
@@ -454,8 +459,11 @@ addproc(struct proc *p, int id)
   if(id < 0 || id > 4)
     return;
   if(queue[id].proc[queue[id].tail] != 0 || queue[id].tail == NPROC)
-    panic("fill queue");
-  // cprintf("added proc %d to %d\n",p->pid, id);
+    panic("filled queue");
+  for(int i = 0; i < queue[id].tail; i++) {
+    if(queue[id].proc[i]->pid == p->pid)
+      return;
+  }
   queue[id].proc[queue[id].tail++] = p;
   p->queue = id;
   p->qtime = 0;
@@ -463,6 +471,8 @@ addproc(struct proc *p, int id)
   return;
 }     
 
+// Removes process from queue if found
+// Does nothing otherwise
 void
 removeproc(struct proc *p, int id)
 {
@@ -518,6 +528,8 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      chosen->ntimes++;
+      chosen->lastref = ticks;
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -546,7 +558,8 @@ scheduler(void)
     c->proc = chosen;
     switchuvm(chosen);
     chosen->state = RUNNING;
-
+    chosen->ntimes++;
+    chosen->lastref = ticks;
     swtch(&(c->scheduler), chosen->context);
     switchkvm();
 
@@ -574,12 +587,11 @@ scheduler(void)
       release(&ptable.lock);
       continue;
     }
-    cprintf("[%d] Running [%d]\n", 
-            ticks, chosen->pid);
     c->proc = chosen;
     switchuvm(chosen);
     chosen->state = RUNNING;
     chosen->ntimes++;
+    chosen->lastref = ticks;
     swtch(&(c->scheduler), chosen->context);
     switchkvm();
  
@@ -601,8 +613,8 @@ scheduler(void)
           struct proc* p = queue[i].proc[j];
           if(p->state == RUNNABLE && 
               ticks - p->lastref >= 30){ // Over 30 ticks from last scheduling
-            cprintf("[%d] Promoted [%d] froom queue _%d_ to _%d_\n",
-                    ticks, p->pid, i, i - 1);
+            // cprintf("[%d] Promoted [%d] froom queue _%d_ to _%d_\n",
+            //         ticks, p->pid, i, i - 1);
             removeproc(p, i);
             addproc(p, i - 1);
             p->timeslice = 0;
@@ -629,13 +641,13 @@ scheduler(void)
       release(&ptable.lock);
       continue;
     }
-    cprintf("[%d] Running [%d] in queue _%d_\n", 
-            ticks, chosen->pid, chosen->queue);
+    // cprintf("[%d] Running [%d] in queue _%d_\n", 
+    //         ticks, chosen->pid, chosen->queue);
     c->proc = chosen;
     switchuvm(chosen);
     chosen->state = RUNNING;
-    chosen->ntimes++;
     chosen->lastref = ticks;
+    chosen->ntimes++;
     swtch(&(c->scheduler), chosen->context);
     switchkvm();
  
@@ -650,8 +662,8 @@ scheduler(void)
         chosen->demote = 0;
         removeproc(chosen, q);
         if(q < NQUEUE - 1){
-          cprintf("[%d] Demoted [%d] from _%d_ to _%d_\n", 
-                ticks,chosen->pid, q, q + 1);
+          // cprintf("[%d] Demoted [%d] from _%d_ to _%d_\n", 
+                // ticks,chosen->pid, q, q + 1);
           addproc(chosen, q + 1);
         } else {
           addproc(chosen, q);
@@ -869,19 +881,29 @@ procdump(void)
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
-#ifdef MLFQ
-    cprintf("%d %d %d", p->queue, p->demote);
-#endif
     cprintf("\n");
   }
-#ifdef MLFQ
-  cprintf("Queue status\n");
-  for(int i = 0; i < NQUEUE; i++){
-    cprintf("%d %d:\n", i, queue[i].tail);
-    for(int j = 0; j < queue[i].tail; j++){
-      cprintf("%d ",queue[i].proc[j]);
+}
+
+void
+processinfo(struct procstat * res)
+{
+  acquire(&ptable.lock);
+  struct proc* p;
+  int i;
+  for(p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++){
+    if(p !=  0){
+      res[i].nrun = p->ntimes;
+      res[i].curq = p->queue;
+      res[i].pid = p->pid;
+      res[i].priority = p->priority;
+      res[i].rtime = p->rtime;
+      res[i].wtime = ticks - p->lastref;
+      res[i].state = p->state;
+      for(int j = 0; j < NQUEUE; j++)
+        res[i].ticks[j] = p->ticks[j];
     }
-    cprintf("\n");
   }
-#endif
+  release(&ptable.lock);
+  return;
 }

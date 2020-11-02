@@ -180,8 +180,10 @@ UPROGS=\
 	_ln\
 	_ls\
 	_mkdir\
+	_ps\
 	_rm\
 	_schedulertest\
+	_setpriority\
 	_sh\
 	_stressfs\
 	_time\
@@ -260,8 +262,8 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
-	ln.c ls.c mkdir.c rm.c schedulertest.c stressfs.c time.c\
-	usertests.c wc.c zombie.c printf.c umalloc.c\
+	ln.c ls.c mkdir.c rm.c schedulertest.c setpriority.c stressfs.c time.c\
+	usertests.c wc.c zombie.c printf.c ps.c umalloc.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
 
