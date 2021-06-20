@@ -5,13 +5,7 @@
 ```C
  int waitx(int *, int *);
 ```
-As mentioned this syscall stores the value of run time and waiting time of the process which was being waited on.
-
-The process is assigned an `etime` when it ends, thus the waiting time `wtime`is equal to `etime - ctime - rtime` where `ctime` is the creation time of the process.
-
-The user program time uses this syscall to get the time of the command given as argument. `time [command]*`
-
-For example `time ls` gives the `rtime` and the `wtime` of the ls command
+As mentioned this syscall stores the value of run time and waiting time of the process which was being waited on. The process is assigned an `etime` when it ends, thus the waiting time `wtime`is equal to `etime - ctime - rtime` where `ctime` is the creation time of the process. The user program time uses this syscall to get the time of the command given as argument. `time [command]*` For example `time ls` gives the `rtime` and the `wtime` of the ls command
 
 **ps**
 
@@ -22,57 +16,38 @@ For example `time ls` gives the `rtime` and the `wtime` of the ls command
 ```c
 int setpriority(int);
 ```
-This syscall takes the new priority for a process and returns it's old priority.If the new priority is not valid, the priority is not changed. Priority is not valid if the PBS scheduler is not being used. If no such process exists returns 
--1, else 0;
+This syscall takes the new priority for a process and returns it's old priority. If the new priority is not valid, the priority is not changed. Priority is not valid if the PBS scheduler is not being used. If no such process exists returns -1, else 0;
 
 ### Scheduling: 
-RR(Round-Robin)
- 
-The default scheduler is the `RR` scheduler.
+**RR(Round-Robin)**
 
-The scheduler flag is used to signify the scheduler used while compiling.
+The default scheduler is the **RR** scheduler. The compile-time scheduler flag is used to signify the scheduler used while compiling.
 
-FCFS(First Come First Serve)
+**FCFS(First Come First Serve)**
 
 This is pretty standard. The simplest approach
 
-PBS(Prority Based Scheduling)
+**PBS(Priority Based Scheduling)**
 
-When set to `PBS` the process has a priority and higher priority process are scheduled first. The `setpriority` user program is used to set the priority of a process. Usage 
-`setpriority [pid] [val]`
+When set to **PBS** the process has a priority and higher priority process are scheduled first. The `setpriority` user program is used to set the priority of a process. Usage `setpriority [pid] [val]`
 
-MLFQ(Multi-Level Feedback Queue)
+**MLFQ(Multi-Level Feedback Queue)**
 
 1. On the initiation of a process, push it to the end of the highest priority queue.
-
 2. The highest priority queue should be running always, if not empty.
-
 3. If the process completes, it leaves the system.
-
 4. If the process uses the complete time slice assigned for its current priority queue, it is preempted and inserted at the end of the next lower level queue.
-
 5. If a process voluntarily relinquishes control of the CPU, it leaves the queuing network, and when the process becomes ready again after the I/O, it is inserted at the tail of the same queue, from which it is relinquished earlier. This can happen  if a process goes to preform a syscall before the time slice is over, thus a process would always be on the higher level queue and lower process would be kept waiting, although the process would be entered at the end of the queue so ageing process would at sometime
 be scheduled.
-
-6. A round-robin scheduler should be used for processes at the lowest priority
-  queue.
-
+6. A round-robin scheduler should be used for processes at the lowest priority queue.
 7. To prevent starvation, implement the ageing phenomenon: 
+	1. If the wait time of a process in lower priority queues exceeds a given limit(assign a suitable limit to prevent starvation), their priority is increased and they are pushed to the next higher priority queue.
+8. The wait time is reset to 0 whenever a process gets selected by the scheduler or if a change in the queue takes place (because of ageing).
+9. Kept 30 time slices as the limit for ageing.
 
-  a. If the wait time of a process in lower priority queues exceeds a given
-  limit(assign a suitable limit to prevent starvation), their priority is
-  increased and they are pushed to the next higher priority queue.
-  b. The wait time is reset to 0 whenever a process gets selected by the
-  scheduler or if a change in the queue takes place (because of ageing).
+Implemented a user program `schedulertest` that can be used to test the scheduler. Prints the average time for each of the x sub processes. And the total time as well. Here are some comparisons:
 
-Kept 30 time slices as the limit for ageing.
-
-Implemented a user program `schedulertest` that can be used to test the scheduler
-Prints the average time for each of the x sub processes. And the total time as well.
-
-Here are some comparisons:
-
-On a single CPU, 5 sub processes(all spawn at the same time).
+- On a single CPU, 5 sub processes(all spawn at the same time).
 
 | Scheduler | rtime | wtime |
 | :-------: | :---: | :---: |
@@ -81,7 +56,7 @@ On a single CPU, 5 sub processes(all spawn at the same time).
 |  `FCFS`   |  336  |  618  |
 |  `MLFQ`   |  283  | 1301  |
 
-2 CPU's for 10 sub processes.(MLFQ is using only one CPU, So not included)
+- 2 CPU's for 10 sub processes.(MLFQ is using only one CPU, So not included)
 
 | Scheduler | rtime | wtime |
 | :-------: | :---: | :---: |
@@ -92,7 +67,7 @@ On a single CPU, 5 sub processes(all spawn at the same time).
 As expected `MLFQ` has higher `wtime` due to more work done by the scheduler to decide which process to schedule next.  `MLFQ` and `RR` we considerably slower time wise. `RR` suffers from high amounts of context switching. `FCFS` has highest `rtime` as CPU spent very less time deciding which process to take up next and let the process do it's own job.
 
 **ps**
-The user program ps uses the following structure to get the values of the current state of the process:
+The user program `ps` uses the following structure to get the values of the current state of the process:
 
 ```C
 #include "param.h"
@@ -108,9 +83,7 @@ struct procstat {
   int ticks[NQUEUE];
 };
 ```
-They correspond directly to the required quantities.
-Note:
-Some quantities may not appear which using scheduling algorithms that don't support those quantities.
+They correspond directly to the required quantities. Note: Some quantities may not appear which using scheduling algorithms that don't support those quantities.
 
 ```C
 int procinfo(struct procstat*);
