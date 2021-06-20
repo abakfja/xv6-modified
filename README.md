@@ -1,6 +1,7 @@
-# Assignment 5 #
-## Question 1 ##
-### waitx ###
+# xv6 OS
+
+### Syscalls
+**waitx**
 ```C
  int waitx(int *, int *);
 ```
@@ -12,40 +13,43 @@ The user program time uses this syscall to get the time of the command given as 
 
 For example `time ls` gives the `rtime` and the `wtime` of the ls command
 
-### ps ###
+**ps**
 
 `ps` is explained after the `MLFQ` has bee explained
 
-## Question 2 ##
-### setpriority
+**setpriority**
+
 ```c
 int setpriority(int);
 ```
 This syscall takes the new priority for a process and returns it's old priority.If the new priority is not valid, the priority is not changed. Priority is not valid if the PBS scheduler is not being used. If no such process exists returns 
 -1, else 0;
 
-### Scheduling: ###
-#### RR ####
+### Scheduling: 
+RR(Round-Robin)
+ 
 The default scheduler is the `RR` scheduler.
 
 The scheduler flag is used to signify the scheduler used while compiling.
 
-#### FCFS ####
+FCFS(First Come First Serve)
+
 This is pretty standard. The simplest approach
 
-#### PBS ####
+PBS(Prority Based Scheduling)
+
 When set to `PBS` the process has a priority and higher priority process are scheduled first. The `setpriority` user program is used to set the priority of a process. Usage 
 `setpriority [pid] [val]`
 
-#### MLFQ ####
+MLFQ(Multi-Level Feedback Queue)
+
 1. On the initiation of a process, push it to the end of the highest priority queue.
 
 2. The highest priority queue should be running always, if not empty.
 
 3. If the process completes, it leaves the system.
 
-4. If the process uses the complete time slice assigned for its current priority
-  queue, it is preempted and inserted at the end of the next lower level queue.
+4. If the process uses the complete time slice assigned for its current priority queue, it is preempted and inserted at the end of the next lower level queue.
 
 5. If a process voluntarily relinquishes control of the CPU, it leaves the queuing network, and when the process becomes ready again after the I/O, it is inserted at the tail of the same queue, from which it is relinquished earlier. This can happen  if a process goes to preform a syscall before the time slice is over, thus a process would always be on the higher level queue and lower process would be kept waiting, although the process would be entered at the end of the queue so ageing process would at sometime
 be scheduled.
@@ -87,7 +91,7 @@ On a single CPU, 5 sub processes(all spawn at the same time).
 
 As expected `MLFQ` has higher `wtime` due to more work done by the scheduler to decide which process to schedule next.  `MLFQ` and `RR` we considerably slower time wise. `RR` suffers from high amounts of context switching. `FCFS` has highest `rtime` as CPU spent very less time deciding which process to take up next and let the process do it's own job.
 
-### ps ###
+**ps**
 The user program ps uses the following structure to get the values of the current state of the process:
 
 ```C
@@ -117,8 +121,8 @@ struct procstat buf[NPROC];
 ```
 These would be filled at the end of the command.
 
+FROM ORIGINAL AUTHORS
 
-# Original README #
 NOTE: we have stopped maintaining the x86 version of xv6, and switched
 our efforts to the RISC-V version
 (https://github.com/mit-pdos/xv6-riscv.git)
