@@ -528,8 +528,8 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      chosen->ntimes++;
-      chosen->lastref = ticks;
+      // chosen->ntimes++;
+      // chosen->lastref = ticks;
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
